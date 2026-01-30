@@ -1,78 +1,199 @@
 <!DOCTYPE html>
-<html>
+<html lang="tr">
 <head>
-<meta charset="UTF-8">
-<title>Mum Grafik</title>
-
-<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
-
+<meta charset="utf-8"/>
+<title>XVARANT - %19.61 Düşük Açılış</title>
 <style>
-body {
-  margin: 0;
-  background: black;
-}
-#chart {
-  width: 100vw;
-  height: 100vh;
-}
+  :root { --green:#0a932f; --red:#c1121f; --bg:#f5f5f5; --card:#fff; --bd:#cfcfcf; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:20px; background:var(--bg); font:12px/1.35 Arial, Helvetica, sans-serif; color:#000; overflow: hidden; }
+  
+  .main-container { display: flex; gap: 20px; height: 90vh; align-items: stretch; }
+  
+  .price-box { 
+    width: 280px; 
+    background: var(--card); 
+    border: 1px solid var(--bd); 
+    border-radius: 8px; 
+    padding: 15px;
+    height: fit-content;
+    flex-shrink: 0;
+  }
+
+  .header { font-weight:700; font-size:16px; margin-bottom: 10px; border-bottom:1px solid var(--bd); padding-bottom: 8px; }
+  .price { font-size:24px; font-weight: 700; }
+  .green { color:var(--green); }
+  .red { color:var(--red); }
+
+  #chartWrapper { 
+    flex-grow: 1; 
+    background: #fff; 
+    border: 1px solid var(--bd); 
+    position: relative; 
+    border-radius: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  
+  #priceDisplay { position: sticky; left: 10px; top: 10px; width: fit-content; background: rgba(0, 0, 0, 0.7); color: #fff; padding: 5px 10px; border-radius: 4px; font-size: 12px; z-index: 100; pointer-events: none; }
+  #canvasContainer { min-width: 100%; height: 100%; display: block; }
+  canvas { display: block; }
+
+  #manualPanel { 
+    position: fixed; 
+    top: 50%; 
+    left: 50%; 
+    transform: translate(-50%, -50%);
+    width: 300px; 
+    background: var(--card); 
+    border: 2px solid #333; 
+    border-radius: 8px; 
+    padding: 15px; 
+    z-index: 1000; 
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  }
+  
+  .controls { display: grid; grid-template-columns: 1fr; gap: 8px; }
+  .controls input, .controls button { padding: 10px; width: 100%; font-size: 12px; border: 1px solid var(--bd); border-radius: 4px; }
+  .controls button { cursor: pointer; font-weight: bold; color: white; }
+
+  #chartWrapper::-webkit-scrollbar { height: 10px; }
+  #chartWrapper::-webkit-scrollbar-track { background: #f1f1f1; }
+  #chartWrapper::-webkit-scrollbar-thumb { background: #888; border-radius: 5px; }
 </style>
 </head>
+<body class="light">
 
-<body>
+<div class="main-container">
+    <div class="price-box">
+        <div class="header">XVARANT (1 DK)</div>
+        <div id="price" class="price green">
+            <span id="priceMain">0</span>,<span id="priceSub">00</span>
+            <div style="font-size: 12px; font-weight: normal; margin-top: 5px;">
+                <span id="priceDiff">(+0,00 TL)</span>
+                <span id="priceChange" style="margin-left:5px;">▲0,00%</span>
+            </div>
+        </div>
+    </div>
 
-<div id="chart"></div>
+    <div id="chartWrapper">
+        <div id="priceDisplay">Fiyat: --</div>
+        <div id="canvasContainer">
+            <canvas id="candlestickChart"></canvas>
+        </div>
+    </div>
+</div>
+
+<div id="manualPanel" style="display:none;">
+    <div style="font-weight:bold; margin-bottom:10px; border-bottom:1px solid #ddd;">İşlem Paneli (F2)</div>
+    <div class="controls">
+        <label>Lot <input id="lotInput" type="number" value="1000"/></label>
+        <label>% Hedef <input id="percentInput" type="number" step="0.01" value="0.14"/></label>
+        <button onclick="manualOrder('buy')" style="background:var(--green);">ALIŞ (+%)</button>
+        <button onclick="manualOrder('sell')" style="background:var(--red);">SATIŞ (-%)</button>
+    </div>
+</div>
 
 <script>
-const chart = LightweightCharts.createChart(document.getElementById('chart'), {
-  layout: {
-    background: { color: '#000' },
-    textColor: '#fff'
-  },
-  timeScale: {
-    timeVisible: true,
-    secondsVisible: false
+// --- Fiyat Başlatma (%19.61 Düşük) ---
+const basePrice = 14082.76;
+let lastPrice = basePrice * (1 - 19.61 / 100); 
+let openPrice = lastPrice; 
+
+let rightData = [];
+const CANDLE_W = 15; 
+const SPACING = 5;   
+const c = document.getElementById("candlestickChart");
+const ctx = c.getContext("2d");
+const wrapper = document.getElementById("chartWrapper");
+
+window.addEventListener('keydown', (e) => { if (e.key === 'F2') togglePanel(); });
+
+function togglePanel() {
+  let p = document.getElementById("manualPanel");
+  p.style.display = (p.style.display === "none") ? "block" : "none";
+}
+
+function updateUI() {
+    let up = lastPrice >= openPrice;
+    document.getElementById("price").className = `price ${up ? "green" : "red"}`;
+    let parts = lastPrice.toFixed(2).split('.');
+    document.getElementById("priceMain").textContent = parts[0];
+    document.getElementById("priceSub").textContent = parts[1];
+    let diff = lastPrice - openPrice;
+    document.getElementById("priceDiff").textContent = `(${up ? "+" : ""}${diff.toFixed(2).replace(".",",")} TL)`;
+    document.getElementById("priceChange").textContent = `${up ? "▲" : "▼"}${(diff/openPrice*100).toFixed(2)}%`;
+    document.getElementById("priceDisplay").textContent = "Fiyat: " + lastPrice.toFixed(2);
+}
+
+function updateRight() {
+  let p = lastPrice; 
+  let now = new Date(); 
+  let key = now.getHours() + ":" + now.getMinutes();
+
+  if (rightData.length === 0 || rightData[rightData.length-1].time !== key) {
+    rightData.push({time:key, open:p, high:p, low:p, close:p});
+  } else {
+    let last = rightData[rightData.length-1];
+    last.high = Math.max(last.high, p);
+    last.low = Math.min(last.low, p);
+    last.close = p;
   }
-});
+  drawRight();
+}
 
-const series = chart.addCandlestickSeries();
+function drawRight() {
+  const requiredWidth = rightData.length * (CANDLE_W + SPACING) + 150;
+  c.width = Math.max(wrapper.clientWidth, requiredWidth);
+  c.height = wrapper.clientHeight - 20;
+  
+  ctx.clearRect(0,0,c.width,c.height);
+  
+  let highs = rightData.map(d=>d.high);
+  let lows = rightData.map(d=>d.low);
+  let maxP = Math.max(...highs) * 1.0001;
+  let minP = Math.min(...lows) * 0.9999;
+  let range = maxP - minP || 0.1;
 
-let price = 100;
+  rightData.forEach((d, i) => {
+    let x = 50 + (i * (CANDLE_W + SPACING));
+    let yH = ((maxP - d.high) / range) * c.height;
+    let yL = ((maxP - d.low) / range) * c.height;
+    let yO = ((maxP - d.open) / range) * c.height;
+    let yC = ((maxP - d.close) / range) * c.height;
+    
+    let color = d.close >= d.open ? "#0a932f" : "#c1121f";
+    ctx.strokeStyle = color; 
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x + CANDLE_W/2, yH); ctx.lineTo(x + CANDLE_W/2, yL); ctx.stroke();
+    ctx.fillStyle = color; 
+    ctx.fillRect(x, Math.min(yO, yC), CANDLE_W, Math.abs(yC-yO) || 1);
 
-let candle = {
-  time: Math.floor(Date.now() / 1000),
-  open: price,
-  high: price,
-  low: price,
-  close: price
-};
+    if(i % 5 === 0) {
+        ctx.fillStyle = "#999";
+        ctx.fillText(d.time, x, c.height + 15);
+    }
+  });
+  wrapper.scrollLeft = wrapper.scrollWidth;
+}
 
-series.setData([candle]);
-
-window.yukselt = function () {
-  price += 1;
-  candle.high = Math.max(candle.high, price);
-  candle.close = price;
-  series.update(candle);
-};
-
-window.indir = function () {
-  price -= 1;
-  candle.low = Math.min(candle.low, price);
-  candle.close = price;
-  series.update(candle);
-};
+function manualOrder(side) {
+    let percent = parseFloat(document.getElementById("percentInput").value) || 0;
+    if (side === 'buy') lastPrice *= (1 + (percent / 100));
+    else lastPrice *= (1 - (percent / 100));
+    updateUI(); 
+    updateRight();
+}
 
 setInterval(() => {
-  candle = {
-    time: Math.floor(Date.now() / 1000),
-    open: price,
-    high: price,
-    low: price,
-    close: price
-  };
-  series.update(candle);
-}, 60000);
-</script>
+    lastPrice += (Math.random() - 0.5) * 0.01;
+    updateUI(); 
+    updateRight();
+}, 1000);
 
+window.addEventListener('resize', drawRight);
+updateUI(); 
+updateRight();
+</script>
 </body>
 </html>
