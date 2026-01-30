@@ -2,7 +2,7 @@
 <html lang="tr">
 <head>
 <meta charset="utf-8"/>
-<title>XVARANT - %19.61 Düşük Açılış</title>
+<title>XVARANT - Kalıcı Grafik</title>
 <style>
   :root { --green:#0a932f; --red:#c1121f; --bg:#f5f5f5; --card:#fff; --bd:#cfcfcf; }
   * { box-sizing:border-box; }
@@ -10,6 +10,7 @@
   
   .main-container { display: flex; gap: 20px; height: 90vh; align-items: stretch; }
   
+  /* Sol Fiyat Kutusu */
   .price-box { 
     width: 280px; 
     background: var(--card); 
@@ -25,6 +26,7 @@
   .green { color:var(--green); }
   .red { color:var(--red); }
 
+  /* Grafik Alanı */
   #chartWrapper { 
     flex-grow: 1; 
     background: #fff; 
@@ -39,6 +41,7 @@
   #canvasContainer { min-width: 100%; height: 100%; display: block; }
   canvas { display: block; }
 
+  /* F2 Paneli */
   #manualPanel { 
     position: fixed; 
     top: 50%; 
@@ -67,11 +70,11 @@
 <div class="main-container">
     <div class="price-box">
         <div class="header">XVARANT (1 DK)</div>
-        <div id="price" class="price green">
-            <span id="priceMain">0</span>,<span id="priceSub">00</span>
+        <div id="price" class="price">
+            <span id="priceMain">14082</span>,<span id="priceSub">76</span>
             <div style="font-size: 12px; font-weight: normal; margin-top: 5px;">
-                <span id="priceDiff">(+0,00 TL)</span>
-                <span id="priceChange" style="margin-left:5px;">▲0,00%</span>
+                <span id="priceDiff">(-0,00 TL)</span>
+                <span id="priceChange" style="margin-left:5px;">▼-19,61%</span>
             </div>
         </div>
     </div>
@@ -85,27 +88,35 @@
 </div>
 
 <div id="manualPanel" style="display:none;">
-    <div style="font-weight:bold; margin-bottom:10px; border-bottom:1px solid #ddd;">İşlem Paneli (F2)</div>
+    <div style="font-weight:bold; margin-bottom:10px; border-bottom:1px solid #ddd; padding-bottom:5px;">İşlem Paneli (F2)</div>
     <div class="controls">
         <label>Lot <input id="lotInput" type="number" value="1000"/></label>
         <label>% Hedef <input id="percentInput" type="number" step="0.01" value="0.14"/></label>
         <button onclick="manualOrder('buy')" style="background:var(--green);">ALIŞ (+%)</button>
         <button onclick="manualOrder('sell')" style="background:var(--red);">SATIŞ (-%)</button>
+        
+        <button onclick="clearData()" style="background:#666; margin-top:10px; border-color:#444;">GRAFİĞİ SIFIRLA</button>
+        
+        <div style="font-size: 10px; color: #777; text-align: center; margin-top: 5px;">Kapatmak için tekrar F2'ye basın.</div>
     </div>
 </div>
 
 <script>
-// --- Fiyat Başlatma (%19.61 Düşük) ---
-const basePrice = 14082.76;
-let lastPrice = basePrice * (1 - 19.61 / 100); 
-let openPrice = lastPrice; 
-
-let rightData = [];
 const CANDLE_W = 15; 
-const SPACING = 5;   
+const SPACING = 5;
 const c = document.getElementById("candlestickChart");
 const ctx = c.getContext("2d");
 const wrapper = document.getElementById("chartWrapper");
+
+let lastPrice = 14082.76;
+const visualOpenPrice = lastPrice / (1 - 19.61 / 100);
+
+// Verileri Yerel Hafızadan Al
+let rightData = JSON.parse(localStorage.getItem('xvarant_data')) || [];
+
+if(rightData.length > 0) {
+    lastPrice = rightData[rightData.length - 1].close;
+}
 
 window.addEventListener('keydown', (e) => { if (e.key === 'F2') togglePanel(); });
 
@@ -115,14 +126,17 @@ function togglePanel() {
 }
 
 function updateUI() {
-    let up = lastPrice >= openPrice;
+    let diff = lastPrice - visualOpenPrice;
+    let perc = (diff / visualOpenPrice) * 100;
+    let up = diff >= 0;
+
     document.getElementById("price").className = `price ${up ? "green" : "red"}`;
     let parts = lastPrice.toFixed(2).split('.');
     document.getElementById("priceMain").textContent = parts[0];
     document.getElementById("priceSub").textContent = parts[1];
-    let diff = lastPrice - openPrice;
+    
     document.getElementById("priceDiff").textContent = `(${up ? "+" : ""}${diff.toFixed(2).replace(".",",")} TL)`;
-    document.getElementById("priceChange").textContent = `${up ? "▲" : "▼"}${(diff/openPrice*100).toFixed(2)}%`;
+    document.getElementById("priceChange").textContent = `${up ? "▲" : "▼"}${perc.toFixed(2)}%`;
     document.getElementById("priceDisplay").textContent = "Fiyat: " + lastPrice.toFixed(2);
 }
 
@@ -139,6 +153,8 @@ function updateRight() {
     last.low = Math.min(last.low, p);
     last.close = p;
   }
+  
+  localStorage.setItem('xvarant_data', JSON.stringify(rightData));
   drawRight();
 }
 
@@ -183,6 +199,13 @@ function manualOrder(side) {
     else lastPrice *= (1 - (percent / 100));
     updateUI(); 
     updateRight();
+}
+
+function clearData() {
+    if(confirm("Tüm grafik verileri silinsin mi?")) {
+        localStorage.removeItem('xvarant_data');
+        location.reload();
+    }
 }
 
 setInterval(() => {
