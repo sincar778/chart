@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Mum Grafik</title>
+
+<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+
+<style>
+body {
+  margin: 0;
+  background: black;
+}
+#chart {
+  width: 100vw;
+  height: 100vh;
+}
+</style>
+</head>
+
+<body>
+
+<div id="chart"></div>
+
+<script>
+const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+  layout: {
+    background: { color: '#000' },
+    textColor: '#fff'
+  },
+  timeScale: {
+    timeVisible: true,
+    secondsVisible: false
+  }
+});
+
+const series = chart.addCandlestickSeries();
+
+let price = 100;
+
+let candle = {
+  time: Math.floor(Date.now() / 1000),
+  open: price,
+  high: price,
+  low: price,
+  close: price
+};
+
+series.setData([candle]);
+
+window.yukselt = function () {
+  price += 1;
+  candle.high = Math.max(candle.high, price);
+  candle.close = price;
+  series.update(candle);
+};
+
+window.indir = function () {
+  price -= 1;
+  candle.low = Math.min(candle.low, price);
+  candle.close = price;
+  series.update(candle);
+};
+
+setInterval(() => {
+  candle = {
+    time: Math.floor(Date.now() / 1000),
+    open: price,
+    high: price,
+    low: price,
+    close: price
+  };
+  series.update(candle);
+}, 60000);
+</script>
+
+</body>
+</html>
